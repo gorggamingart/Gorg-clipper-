@@ -1,10 +1,11 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GORG AI CLIPPER</title>
+<title>GORG AI CLIPPER V2</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#080e18;color:white;font-family:Arial,sans-serif}
@@ -27,47 +28,51 @@ footer{text-align:center;color:#788ba3;font-size:12px;padding:25px}
 </head>
 <body>
 <header>
- <div class="logo">⚡ GORG AI CLIPPER</div>
- <div class="tag">AI GAMING VIDEO CLIPPING PLATFORM</div>
+<div class="logo">⚡ GORG AI CLIPPER V2</div>
+<div class="tag">MOBILE OPTIMIZED GAMING CLIPPER</div>
 </header>
+
 <main>
- <h1>Turn Gaming Into Shorts.</h1>
- <p>Create vertical gaming clips from your own recordings. More AI features are coming.</p>
+<h1>Turn Gaming Into Shorts.</h1>
+<p>Create gaming clips from your own recordings.</p>
 
- <div class="card">
-  <h2>🎮 1. Select Gaming Video</h2>
-  <input type="file" id="file" accept="video/*">
-  <video id="video" controls playsinline></video>
-  <p>Select a gameplay recording saved on your phone.</p>
- </div>
+<div class="card">
+<h2>🎮 1. Select Gaming Video</h2>
+<input type="file" id="file" accept="video/*">
+<video id="video" controls playsinline></video>
+<p>Select a gameplay recording saved on your phone.</p>
+</div>
 
- <div class="card">
-  <h2>✂️ 2. Create Your Clip</h2>
-  <label>Start time (seconds)</label>
-  <input id="start" type="number" min="0" value="0" step="0.1">
-  <label>End time (seconds)</label>
-  <input id="end" type="number" min="0" value="15" step="0.1">
-  <label>Video format</label>
-  <select id="format">
-   <option value="9:16">9:16 Shorts / Reels / TikTok</option>
-   <option value="16:9">16:9 YouTube</option>
-   <option value="1:1">1:1 Square</option>
-  </select>
-  <button id="make" disabled>CREATE MY CLIP</button>
-  <div class="status" id="status">Choose a video to start.</div>
-  <a id="download" hidden>Download Your Clip</a>
- </div>
+<div class="card">
+<h2>✂️ 2. Create Your Clip</h2>
+<label>Start time (seconds)</label>
+<input id="start" type="number" min="0" value="0" step="0.1">
 
- <div class="card">
-  <h2>🚀 Coming Soon</h2>
-  <p>• AI viral moment detection</p>
-  <p>• Gaming livestream discovery</p>
-  <p>• Automatic captions and subtitles</p>
-  <p>• AI titles and hashtags</p>
-  <p>• Multi-platform stream support</p>
- </div>
- <p>GORG AI CLIPPER — Made for Gaming Creators.</p>
+<label>End time (seconds)</label>
+<input id="end" type="number" min="0" value="15" step="0.1">
+
+<label>Video format</label>
+<select id="format">
+<option value="9:16">9:16 Shorts / Reels / TikTok</option>
+<option value="16:9">16:9 YouTube</option>
+<option value="1:1">1:1 Square</option>
+</select>
+
+<button id="make" disabled>CREATE MY CLIP</button>
+<div class="status" id="status">Choose a video to start.</div>
+<a id="download" hidden>Download Your Clip</a>
+</div>
+
+<div class="card">
+<h2>🚀 Coming Soon</h2>
+<p>• AI viral moment detection</p>
+<p>• Automatic captions and subtitles</p>
+<p>• AI titles and hashtags</p>
+<p>• Multi-platform support</p>
+</div>
+<p>GORG AI CLIPPER — Made for Gaming Creators.</p>
 </main>
+
 <footer>GORG AI CLIPPER © 2026</footer>
 
 <script>
@@ -78,14 +83,24 @@ const end=document.getElementById('end');
 const make=document.getElementById('make');
 const status=document.getElementById('status');
 const download=document.getElementById('download');
-let videoURL;
+
+let videoURL=null;
+let outputURL=null;
+let busy=false;
 
 file.onchange=()=>{
  const f=file.files[0];
  if(!f)return;
+
  if(videoURL)URL.revokeObjectURL(videoURL);
+ if(outputURL)URL.revokeObjectURL(outputURL);
+
  videoURL=URL.createObjectURL(f);
  video.src=videoURL;
+ video.load();
+ make.disabled=true;
+ download.hidden=true;
+
  video.onloadedmetadata=()=>{
   start.value=0;
   end.value=Math.min(15,video.duration);
@@ -95,68 +110,186 @@ file.onchange=()=>{
 };
 
 make.onclick=async()=>{
- const a=Number(start.value),b=Number(end.value);
- if(a<0||b<=a||b>video.duration){
-  status.textContent="Please check your start and end times.";
+ if(busy)return;
+
+ const a=Number(start.value);
+ const b=Number(end.value);
+
+ if(!video.src||!Number.isFinite(video.duration)||
+    a<0||b<=a||b>video.duration){
+  status.textContent="Please check your video and start/end times.";
   return;
  }
- if(!video.captureStream||!HTMLCanvasElement.prototype.captureStream||!window.MediaRecorder){
-  status.textContent="Your browser does not support video export. Try updated Chrome.";
+
+ if(!video.captureStream||
+    !HTMLCanvasElement.prototype.captureStream||
+    !window.MediaRecorder){
+  status.textContent="Export is not supported by this browser. Try updated Chrome.";
   return;
  }
+
+ busy=true;
  make.disabled=true;
  download.hidden=true;
- status.textContent="Creating your clip. Please wait...";
 
- const ratio=document.getElementById('format').value.split(':').map(Number);
- const w=720,h=Math.round(720*ratio[1]/ratio[0]);
- const canvas=document.createElement('canvas');
- canvas.width=w;canvas.height=h;
- const ctx=canvas.getContext('2d');
- const stream=canvas.captureStream(30);
- video.captureStream().getAudioTracks().forEach(t=>stream.addTrack(t));
+ let canvasStream=null;
+ let sourceStream=null;
+ let recorder=null;
+ let animationId=null;
+ let audioContext=null;
+ let stopped=false;
 
  try{
-  const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
-  if(!mime)throw Error('Video format unavailable');
+  status.textContent="Preparing your clip...";
+
+  const ratio=document.getElementById('format').value.split(':').map(Number);
+  const w=360;
+  const h=Math.round(w*ratio[1]/ratio[0]);
+
+  const canvas=document.createElement('canvas');
+  canvas.width=w;
+  canvas.height=h;
+
+  const ctx=canvas.getContext('2d',{alpha:false});
+  if(!ctx)throw Error("Canvas unavailable");
+
+  canvasStream=canvas.captureStream(15);
+
   video.pause();
+  video.muted=false;
+
   video.currentTime=a;
-  await new Promise(resolve=>video.onseeked=resolve);
-  const recorder=new MediaRecorder(stream,{mimeType:mime});
+  await new Promise((resolve,reject)=>{
+   const timeout=setTimeout(()=>reject(Error("Video seek timeout")),10000);
+   video.addEventListener('seeked',()=>{
+    clearTimeout(timeout);
+    resolve();
+   },{once:true});
+  });
+
+  sourceStream=video.captureStream();
+
+  const audioTracks=sourceStream.getAudioTracks();
+  if(audioTracks.length){
+   audioTracks.forEach(track=>{
+    canvasStream.addTrack(track);
+   });
+  }else{
+   status.textContent="Warning: No audio track found. Exporting video only.";
+  }
+
+  const mime=[
+   'video/webm;codecs=vp8,opus',
+   'video/webm'
+  ].find(type=>MediaRecorder.isTypeSupported(type));
+
+  if(!mime)throw Error("Supported video format not found");
+
+  recorder=new MediaRecorder(canvasStream,{
+   mimeType:mime,
+   videoBitsPerSecond:500000,
+   audioBitsPerSecond:64000
+  });
+
   const chunks=[];
-  recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
-  const finished=new Promise(resolve=>recorder.onstop=resolve);
+  recorder.ondataavailable=e=>{
+   if(e.data&&e.data.size)chunks.push(e.data);
+  };
+
+  const finished=new Promise((resolve,reject)=>{
+   recorder.onstop=resolve;
+   recorder.onerror=()=>reject(Error("Recording failed"));
+  });
 
   function draw(){
-   if(video.paused||video.ended)return;
-   const scale=Math.max(w/video.videoWidth,h/video.videoHeight);
-   const sw=w/scale,sh=h/scale;
-   ctx.fillStyle="#000";ctx.fillRect(0,0,w,h);
-   ctx.drawImage(video,(video.videoWidth-sw)/2,(video.videoHeight-sh)/2,sw,sh,0,0,w,h);
-   requestAnimationFrame(draw);
+   if(stopped)return;
+
+   if(video.readyState>=2){
+    const scale=Math.max(w/video.videoWidth,h/video.videoHeight);
+    const sw=w/scale;
+    const sh=h/scale;
+
+    ctx.fillStyle="#000";
+    ctx.fillRect(0,0,w,h);
+
+    ctx.drawImage(
+     video,
+     (video.videoWidth-sw)/2,
+     (video.videoHeight-sh)/2,
+     sw,sh,0,0,w,h
+    );
+   }
+
+   animationId=requestAnimationFrame(draw);
   }
-  recorder.start(250);
+
+  recorder.start(1000);
   await video.play();
   draw();
-  await new Promise(resolve=>{
-   function check(){
-    if(video.currentTime>=b||video.ended){video.pause();resolve();}
-    else requestAnimationFrame(check);
+
+  status.textContent="Recording your clip...";
+
+  await new Promise((resolve,reject)=>{
+   let lastTime=performance.now();
+
+   function check(now){
+    if(stopped)return;
+
+    if(video.currentTime>=b||video.ended){
+     resolve();
+     return;
+    }
+
+    if(now-lastTime>15000){
+     reject(Error("Video playback stalled"));
+     return;
+    }
+
+    lastTime=now;
+    requestAnimationFrame(check);
    }
-   check();
+
+   requestAnimationFrame(check);
   });
-  recorder.stop();
-  await finished;
-  stream.getTracks().forEach(t=>t.stop());
-  const url=URL.createObjectURL(new Blob(chunks,{type:mime}));
-  download.href=url;
+
+  stopped=true;
+  video.pause();
+
+  if(animationId)cancelAnimationFrame(animationId);
+
+  const stopPromise=finished;
+  if(recorder.state!=="inactive")recorder.stop();
+  await stopPromise;
+
+  const blob=new Blob(chunks,{type:mime});
+  if(!blob.size)throw Error("Empty video file");
+
+  outputURL=URL.createObjectURL(blob);
+
+  download.href=outputURL;
   download.download="GORG-Gaming-Clip.webm";
   download.textContent="⬇ DOWNLOAD YOUR CLIP";
   download.hidden=false;
+
   status.textContent="Your clip is ready!";
- }catch(e){
-  status.textContent="Export failed. Try a shorter video or use a video editor.";
- }finally{make.disabled=false;video.pause();}
+
+ }catch(error){
+  status.textContent="Export failed: "+error.message;
+ }finally{
+  stopped=true;
+  if(animationId)cancelAnimationFrame(animationId);
+  if(recorder&&recorder.state!=="inactive"){
+   try{recorder.stop()}catch(e){}
+  }
+  if(canvasStream)canvasStream.getTracks().forEach(t=>t.stop());
+  if(sourceStream)sourceStream.getTracks().forEach(t=>t.stop());
+  if(audioContext){
+   try{await audioContext.close()}catch(e){}
+  }
+  video.pause();
+  make.disabled=false;
+  busy=false;
+ }
 };
 </script>
 </body>
