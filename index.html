@@ -1,0 +1,163 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GORG AI CLIPPER</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080e18;color:white;font-family:Arial,sans-serif}
+header{padding:22px 18px;background:#101b2b;border-bottom:1px solid #26364a}
+.logo{font-size:23px;font-weight:900;color:#65e0a3}
+.tag{font-size:11px;color:#9aabc0;margin-top:7px}
+main{max-width:700px;margin:auto;padding:20px 15px}
+h1{font-size:30px;margin:15px 0 8px}
+p{color:#aab8cc;line-height:1.5;font-size:14px}
+.card{background:#111d2e;border:1px solid #293a50;border-radius:16px;padding:17px;margin:16px 0}
+h2{font-size:17px;margin:0 0 12px}
+input,select{width:100%;padding:13px;margin:8px 0;background:#081321;color:white;border:1px solid #34465e;border-radius:9px}
+button{width:100%;padding:14px;border:0;border-radius:10px;background:#65e0a3;color:#062116;font-weight:bold;font-size:15px;margin-top:10px}
+button:disabled{opacity:.4}
+video{width:100%;margin-top:12px;border-radius:10px;background:#000}
+.status{padding:12px;background:#081321;border-radius:9px;margin-top:12px;color:#b6c5d8;font-size:13px}
+a{color:#65e0a3;display:block;margin-top:15px}
+footer{text-align:center;color:#788ba3;font-size:12px;padding:25px}
+</style>
+</head>
+<body>
+<header>
+ <div class="logo">⚡ GORG AI CLIPPER</div>
+ <div class="tag">AI GAMING VIDEO CLIPPING PLATFORM</div>
+</header>
+<main>
+ <h1>Turn Gaming Into Shorts.</h1>
+ <p>Create vertical gaming clips from your own recordings. More AI features are coming.</p>
+
+ <div class="card">
+  <h2>🎮 1. Select Gaming Video</h2>
+  <input type="file" id="file" accept="video/*">
+  <video id="video" controls playsinline></video>
+  <p>Select a gameplay recording saved on your phone.</p>
+ </div>
+
+ <div class="card">
+  <h2>✂️ 2. Create Your Clip</h2>
+  <label>Start time (seconds)</label>
+  <input id="start" type="number" min="0" value="0" step="0.1">
+  <label>End time (seconds)</label>
+  <input id="end" type="number" min="0" value="15" step="0.1">
+  <label>Video format</label>
+  <select id="format">
+   <option value="9:16">9:16 Shorts / Reels / TikTok</option>
+   <option value="16:9">16:9 YouTube</option>
+   <option value="1:1">1:1 Square</option>
+  </select>
+  <button id="make" disabled>CREATE MY CLIP</button>
+  <div class="status" id="status">Choose a video to start.</div>
+  <a id="download" hidden>Download Your Clip</a>
+ </div>
+
+ <div class="card">
+  <h2>🚀 Coming Soon</h2>
+  <p>• AI viral moment detection</p>
+  <p>• Gaming livestream discovery</p>
+  <p>• Automatic captions and subtitles</p>
+  <p>• AI titles and hashtags</p>
+  <p>• Multi-platform stream support</p>
+ </div>
+ <p>GORG AI CLIPPER — Made for Gaming Creators.</p>
+</main>
+<footer>GORG AI CLIPPER © 2026</footer>
+
+<script>
+const file=document.getElementById('file');
+const video=document.getElementById('video');
+const start=document.getElementById('start');
+const end=document.getElementById('end');
+const make=document.getElementById('make');
+const status=document.getElementById('status');
+const download=document.getElementById('download');
+let videoURL;
+
+file.onchange=()=>{
+ const f=file.files[0];
+ if(!f)return;
+ if(videoURL)URL.revokeObjectURL(videoURL);
+ videoURL=URL.createObjectURL(f);
+ video.src=videoURL;
+ video.onloadedmetadata=()=>{
+  start.value=0;
+  end.value=Math.min(15,video.duration);
+  make.disabled=false;
+  status.textContent="Video loaded successfully!";
+ };
+};
+
+make.onclick=async()=>{
+ const a=Number(start.value),b=Number(end.value);
+ if(a<0||b<=a||b>video.duration){
+  status.textContent="Please check your start and end times.";
+  return;
+ }
+ if(!video.captureStream||!HTMLCanvasElement.prototype.captureStream||!window.MediaRecorder){
+  status.textContent="Your browser does not support video export. Try updated Chrome.";
+  return;
+ }
+ make.disabled=true;
+ download.hidden=true;
+ status.textContent="Creating your clip. Please wait...";
+
+ const ratio=document.getElementById('format').value.split(':').map(Number);
+ const w=720,h=Math.round(720*ratio[1]/ratio[0]);
+ const canvas=document.createElement('canvas');
+ canvas.width=w;canvas.height=h;
+ const ctx=canvas.getContext('2d');
+ const stream=canvas.captureStream(30);
+ video.captureStream().getAudioTracks().forEach(t=>stream.addTrack(t));
+
+ try{
+  const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+  if(!mime)throw Error('Video format unavailable');
+  video.pause();
+  video.currentTime=a;
+  await new Promise(resolve=>video.onseeked=resolve);
+  const recorder=new MediaRecorder(stream,{mimeType:mime});
+  const chunks=[];
+  recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  const finished=new Promise(resolve=>recorder.onstop=resolve);
+
+  function draw(){
+   if(video.paused||video.ended)return;
+   const scale=Math.max(w/video.videoWidth,h/video.videoHeight);
+   const sw=w/scale,sh=h/scale;
+   ctx.fillStyle="#000";ctx.fillRect(0,0,w,h);
+   ctx.drawImage(video,(video.videoWidth-sw)/2,(video.videoHeight-sh)/2,sw,sh,0,0,w,h);
+   requestAnimationFrame(draw);
+  }
+  recorder.start(250);
+  await video.play();
+  draw();
+  await new Promise(resolve=>{
+   function check(){
+    if(video.currentTime>=b||video.ended){video.pause();resolve();}
+    else requestAnimationFrame(check);
+   }
+   check();
+  });
+  recorder.stop();
+  await finished;
+  stream.getTracks().forEach(t=>t.stop());
+  const url=URL.createObjectURL(new Blob(chunks,{type:mime}));
+  download.href=url;
+  download.download="GORG-Gaming-Clip.webm";
+  download.textContent="⬇ DOWNLOAD YOUR CLIP";
+  download.hidden=false;
+  status.textContent="Your clip is ready!";
+ }catch(e){
+  status.textContent="Export failed. Try a shorter video or use a video editor.";
+ }finally{make.disabled=false;video.pause();}
+};
+</script>
+</body>
+</html>
